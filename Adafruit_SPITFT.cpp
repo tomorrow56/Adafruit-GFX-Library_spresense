@@ -970,6 +970,11 @@ void Adafruit_SPITFT::writePixels(uint16_t *colors, uint32_t len,
         hwspi._spi->writePixels(colors, len * 2);
         return;
     }
+#elif defined(ARDUINO_ARCH_SPRESENSE)
+    if(connection == TFT_HARD_SPI) {
+        hwspi._spi->send16(colors, len);
+        return;
+    }
 #elif defined(USE_SPI_DMA)
     if((connection == TFT_HARD_SPI) || (connection == TFT_PARALLEL)) {
         int     maxSpan     = maxFillLen / 2; // One scanline max
@@ -1117,6 +1122,24 @@ void Adafruit_SPITFT::writeColor(uint16_t color, uint32_t len) {
         }
         return;
     }
+#elif defined(ARDUINO_ARCH_SPRESENSE)
+    if(connection == TFT_HARD_SPI) {
+        #define SPI_MAX_PIXELS_AT_ONCE 1024
+        static uint16_t temp[SPI_MAX_PIXELS_AT_ONCE];
+        uint16_t        bufLen = (len < SPI_MAX_PIXELS_AT_ONCE) ? len : SPI_MAX_PIXELS_AT_ONCE,
+                        xferLen;
+
+        for(uint32_t t=0; t<bufLen; t++) {
+            temp[t] = color;
+        }
+        // Issue pixels in blocks from temp buffer
+        while(len) {                                 // While pixels remain
+            xferLen = (bufLen < len) ? bufLen : len; // How many this pass?
+            writePixels((uint16_t *)temp, xferLen);
+            len -= xferLen;
+        }
+        return;
+    }
 #else  // !ESP32
  #if defined(USE_SPI_DMA)
     if(((connection == TFT_HARD_SPI) || (connection == TFT_PARALLEL)) &&
@@ -1233,6 +1256,8 @@ void Adafruit_SPITFT::writeColor(uint16_t color, uint32_t len) {
  #elif defined(ESP32)
             hwspi._spi->write(hi);
             hwspi._spi->write(lo);
+ #elif defined(ARDUINO_ARCH_SPRESENSE)
+            hwspi._spi->transfer16(color);
  #else
             hwspi._spi->transfer(hi);
             hwspi._spi->transfer(lo);
@@ -2067,6 +2092,8 @@ void Adafruit_SPITFT::SPI_WRITE16(uint16_t w) {
         AVR_WRITESPI(w);
 #elif defined(ESP8266) || defined(ESP32)
         hwspi._spi->write16(w);
+#elif defined(ARDUINO_ARCH_SPRESENSE)
+        hwspi._spi->transfer16(w);
 #else
         hwspi._spi->transfer(w >> 8);
         hwspi._spi->transfer(w);
